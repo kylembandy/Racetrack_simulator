@@ -268,6 +268,162 @@
         .fade-out {
             opacity: 0 !important;
         }
+        
+        /* Touch Controls */
+        #touch-controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: none; /* Hidden by default, shown on touch devices */
+            pointer-events: none;
+            z-index: 50;
+            padding: 20px;
+        }
+        
+        .touch-control-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        /* Virtual Joystick */
+        .joystick-container {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            pointer-events: auto;
+        }
+        
+        .joystick-base {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.6);
+            border: 3px solid rgba(255, 45, 45, 0.5);
+            position: absolute;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+        }
+        
+        .joystick-stick {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255, 45, 45, 0.8);
+            border: 2px solid rgba(255, 45, 45, 1);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transition: transform 0.1s ease-out;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+            pointer-events: none;
+        }
+        
+        .joystick-stick.active {
+            background: rgba(255, 45, 45, 1);
+            box-shadow: 0 0 20px rgba(255, 45, 45, 0.6);
+        }
+        
+        .touch-button {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.7);
+            border: 3px solid rgba(255, 45, 45, 0.6);
+            color: white;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            pointer-events: auto;
+            transition: all 0.1s ease;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+        }
+        
+        .touch-button:active,
+        .touch-button.active {
+            background: rgba(255, 45, 45, 0.8);
+            border-color: rgba(255, 45, 45, 1);
+            transform: scale(0.95);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.5);
+        }
+        
+        .touch-button.brake {
+            width: 80px;
+            height: 80px;
+            background: rgba(200, 0, 0, 0.7);
+            border-color: rgba(255, 100, 100, 0.6);
+        }
+        
+        .touch-button.brake:active,
+        .touch-button.brake.active {
+            background: rgba(255, 0, 0, 0.9);
+            border-color: rgba(255, 150, 150, 1);
+        }
+        
+        .touch-accelerate {
+            position: fixed;
+            right: 20px;
+            bottom: 200px;
+        }
+        
+        .touch-brake {
+            position: fixed;
+            right: 20px;
+            bottom: 110px;
+        }
+        
+        @media (max-width: 768px) {
+            #touch-controls {
+                display: block;
+            }
+            
+            .joystick-container {
+                width: 100px;
+                height: 100px;
+            }
+            
+            .joystick-base {
+                width: 100px;
+                height: 100px;
+            }
+            
+            .joystick-stick {
+                width: 45px;
+                height: 45px;
+            }
+            
+            .touch-button {
+                width: 60px;
+                height: 60px;
+                font-size: 1rem;
+            }
+            
+            .touch-button.brake {
+                width: 70px;
+                height: 70px;
+            }
+            
+            .touch-accelerate {
+                bottom: 180px;
+            }
+            
+            .touch-brake {
+                bottom: 100px;
+            }
+        }
+        
+        @media (pointer: coarse) {
+            #touch-controls {
+                display: block;
+            }
+        }
     </style>
     <script type="importmap">
         {
@@ -308,6 +464,22 @@
     <div id="minimap"><canvas id="minimap-canvas"></canvas></div>
     <div id="reset-hint">Press <span class="reset-key">R</span> if stuck</div>
     <div id="collision-flash"></div>
+    
+    <!-- Touch Controls -->
+    <div id="touch-controls">
+        <div class="touch-control-group">
+            <div class="joystick-container" id="joystick-container">
+                <div class="joystick-base"></div>
+                <div class="joystick-stick" id="joystick-stick"></div>
+            </div>
+        </div>
+        <div class="touch-accelerate">
+            <div class="touch-button" id="touch-accelerate">GO</div>
+        </div>
+        <div class="touch-brake">
+            <div class="touch-button brake" id="touch-brake">STOP</div>
+        </div>
+    </div>
     
     <!-- Starting Lights -->
     <div id="start-overlay"></div>
@@ -579,6 +751,9 @@
             window.addEventListener('resize', onResize);
             window.addEventListener('keydown', (e) => handleKey(e, true));
             window.addEventListener('keyup', (e) => handleKey(e, false));
+            
+            // Touch controls
+            setupTouchControls();
         }
 
         function createGround() {
@@ -1470,6 +1645,168 @@
                     if (pressed) resetKart();
                 }
             }
+        }
+        
+        function setupTouchControls() {
+            // Get joystick elements
+            const joystickContainer = document.getElementById('joystick-container');
+            const joystickStick = document.getElementById('joystick-stick');
+            const touchAccelerate = document.getElementById('touch-accelerate');
+            const touchBrake = document.getElementById('touch-brake');
+            
+            // Joystick state
+            let joystickActive = false;
+            let joystickCenterX = 0;
+            let joystickCenterY = 0;
+            
+            // Calculate joystick radius dynamically based on container size
+            function getJoystickRadius() {
+                if (!joystickContainer) return 35;
+                const rect = joystickContainer.getBoundingClientRect();
+                // Radius is about 30% of the container size (allows stick to move within the base)
+                return Math.min(rect.width, rect.height) * 0.3;
+            }
+            
+            // Helper function to handle touch input
+            function handleTouchInput(input, pressed, element) {
+                inputs[input] = pressed;
+                if (element) {
+                    if (pressed) {
+                        element.classList.add('active');
+                    } else {
+                        element.classList.remove('active');
+                    }
+                }
+            }
+            
+            // Prevent default touch behaviors
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            
+            // Get touch position relative to joystick container
+            function getTouchPos(e) {
+                const rect = joystickContainer.getBoundingClientRect();
+                const touch = e.touches[0] || e.changedTouches[0];
+                return {
+                    x: touch.clientX - rect.left - rect.width / 2,
+                    y: touch.clientY - rect.top - rect.height / 2
+                };
+            }
+            
+            // Update joystick position and inputs
+            function updateJoystick(x, y) {
+                const joystickRadius = getJoystickRadius();
+                
+                // Calculate distance from center
+                const distance = Math.sqrt(x * x + y * y);
+                
+                // Clamp to joystick radius
+                const clampedDistance = Math.min(distance, joystickRadius);
+                const angle = Math.atan2(y, x);
+                
+                // Update stick visual position
+                const stickX = Math.cos(angle) * clampedDistance;
+                const stickY = Math.sin(angle) * clampedDistance;
+                joystickStick.style.transform = `translate(calc(-50% + ${stickX}px), calc(-50% + ${stickY}px))`;
+                
+                // Normalize to -1 to 1 range
+                const normalizedX = clampedDistance > 0 ? (stickX / joystickRadius) : 0;
+                const normalizedY = clampedDistance > 0 ? (-stickY / joystickRadius) : 0; // Invert Y (screen coords)
+                
+                // Convert to inputs
+                // Y-axis: forward (positive) / backward (negative)
+                inputs.up = normalizedY > 0.1;
+                inputs.down = normalizedY < -0.1;
+                
+                // X-axis: left (negative) / right (positive)
+                inputs.left = normalizedX < -0.1;
+                inputs.right = normalizedX > 0.1;
+            }
+            
+            // Reset joystick to center
+            function resetJoystick() {
+                joystickActive = false;
+                joystickStick.style.transform = 'translate(-50%, -50%)';
+                joystickStick.classList.remove('active');
+                inputs.up = false;
+                inputs.down = false;
+                inputs.left = false;
+                inputs.right = false;
+            }
+            
+            // Joystick touch handlers
+            if (joystickContainer && joystickStick) {
+                joystickContainer.addEventListener('touchstart', (e) => {
+                    preventDefaults(e);
+                    joystickActive = true;
+                    joystickStick.classList.add('active');
+                    const pos = getTouchPos(e);
+                    updateJoystick(pos.x, pos.y);
+                });
+                
+                joystickContainer.addEventListener('touchmove', (e) => {
+                    if (joystickActive) {
+                        preventDefaults(e);
+                        const pos = getTouchPos(e);
+                        updateJoystick(pos.x, pos.y);
+                    }
+                });
+                
+                joystickContainer.addEventListener('touchend', (e) => {
+                    preventDefaults(e);
+                    resetJoystick();
+                });
+                
+                joystickContainer.addEventListener('touchcancel', (e) => {
+                    preventDefaults(e);
+                    resetJoystick();
+                });
+            }
+            
+            // Accelerate button
+            if (touchAccelerate) {
+                touchAccelerate.addEventListener('touchstart', (e) => {
+                    preventDefaults(e);
+                    handleTouchInput('up', true, touchAccelerate);
+                });
+                touchAccelerate.addEventListener('touchend', (e) => {
+                    preventDefaults(e);
+                    handleTouchInput('up', false, touchAccelerate);
+                });
+                touchAccelerate.addEventListener('touchcancel', (e) => {
+                    preventDefaults(e);
+                    handleTouchInput('up', false, touchAccelerate);
+                });
+            }
+            
+            // Brake button
+            if (touchBrake) {
+                touchBrake.addEventListener('touchstart', (e) => {
+                    preventDefaults(e);
+                    handleTouchInput('brake', true, touchBrake);
+                });
+                touchBrake.addEventListener('touchend', (e) => {
+                    preventDefaults(e);
+                    handleTouchInput('brake', false, touchBrake);
+                });
+                touchBrake.addEventListener('touchcancel', (e) => {
+                    preventDefaults(e);
+                    handleTouchInput('brake', false, touchBrake);
+                });
+            }
+            
+            // Prevent scrolling and other default touch behaviors on the game area
+            document.addEventListener('touchmove', (e) => {
+                // Only prevent default if touching a control element
+                const target = e.target;
+                if (target && (target.classList.contains('touch-button') || 
+                    target.closest('.joystick-container') || 
+                    target.closest('#touch-controls'))) {
+                    preventDefaults(e);
+                }
+            }, { passive: false });
         }
         
         function resetKart() {
